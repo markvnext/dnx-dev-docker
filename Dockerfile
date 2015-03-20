@@ -1,17 +1,19 @@
-FROM markvnext/mono
+FROM markvnext/mono-git
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 
 ENV DNX_USER_HOME /opt/dnx
 
 RUN apt-get -qq update && apt-get -qqy install \
+    curl \
     unzip \
-    supervisor \
     autoconf \
     automake \
     build-essential \
-    libtool
-    
+    libtool \
+    && rm -rf /var/lib/{apt,dpkg}/ \
+    && mozroots --machine --import --sync --quiet
+
 # Install libuv for Kestrel from source code (binary is not in wheezy and one in jessie is still too old)
 RUN LIBUV_VERSION=1.4.1 \
     && curl -sSL https://github.com/libuv/libuv/archive/v${LIBUV_VERSION}.tar.gz | tar zxfv - -C /usr/local/src \
@@ -22,10 +24,14 @@ RUN LIBUV_VERSION=1.4.1 \
     && ldconfig
 
 
-RUN mkdir -p /var/lock/apache2 /var/run/apache2 /var/run/sshd /var/log/supervisor
+RUN mkdir -p /var/run/sshd
 
 RUN curl -sSL https://raw.githubusercontent.com/aspnet/Home/dev/dnvminstall.sh | DNX_BRANCH=dev sh \
     && source $DNX_USER_HOME/dnvm/dnvm.sh \
-    && dnvm upgrade
+    && dnvm install latest -a default \
+    && dnvm alias default | xargs -i ln -s $DNX_USER_HOME/runtimes/{} $DNX_USER_HOME/runtimes/default
 
-CMD ["/usr/bin/supervisord"]
+COPY NuGet.Config /tmp/
+RUN mkdir -p $HOME/.config/NuGet/ && mv /tmp/NuGet.Config $HOME/.config/NuGet/
+
+ENV PATH $PATH:$DNX_USER_HOME/runtimes/default/bin
